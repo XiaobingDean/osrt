@@ -1,8 +1,30 @@
-import numpy as np
 import torch
 import torch.nn as nn
 from osrt.layers import RayEncoder, Transformer, SlotAttention
 
+def mask_tokens(x, mask_ratio):
+    """
+    Randomly mask input tokens.
+    Args:
+        x: Input tensor of shape [batch_size, num_patches, channels_per_patch].
+        mask_ratio: The ratio of tokens to mask.
+
+    Returns:
+        masked_x: Tensor with some tokens masked.
+        mask: Boolean mask indicating which tokens are masked.
+    """
+    batch_size, num_patches, channels_per_patch = x.shape
+    num_masked = int(num_patches * mask_ratio)
+
+    mask_indices = torch.randperm(num_patches)[:num_masked]
+    mask = torch.zeros(num_patches, dtype=torch.bool, device=x.device)
+    mask[mask_indices] = True
+
+    # Apply the mask: Set masked tokens to zero
+    masked_x = x.clone()
+    masked_x[:, mask] = 0  # or use a learned mask embedding
+
+    return masked_x, mask
 
 class SRTConvBlock(nn.Module):
     def __init__(self, idim, hdim=None, odim=None):
@@ -23,15 +45,15 @@ class SRTConvBlock(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-
 class ImprovedSRTEncoder(nn.Module):
     """
     Scene Representation Transformer Encoder with the improvements from Appendix A.4 in the OSRT paper.
     """
-    def __init__(self, num_conv_blocks=3, num_att_blocks=5, pos_start_octave=0):
+    def __init__(self, num_conv_blocks=3, num_att_blocks=5, pos_start_octave=0, mask_ratio=0.75):
         super().__init__()
         self.ray_encoder = RayEncoder(pos_octaves=15, pos_start_octave=pos_start_octave,
                                       ray_octaves=15)
+        self.mask_ratio = mask_ratio
 
         conv_blocks = [SRTConvBlock(idim=183, hdim=96)]
         cur_hdim = 192
@@ -47,15 +69,6 @@ class ImprovedSRTEncoder(nn.Module):
                                        mlp_dim=1536, selfatt=True)
 
     def forward(self, images, camera_pos, rays):
-        """
-        Args:
-            images: [batch_size, num_images, 3, height, width]. Assume the first image is canonical.
-            camera_pos: [batch_size, num_images, 3]
-            rays: [batch_size, num_images, height, width, 3]
-        Returns:
-            scene representation: [batch_size, num_patches, channels_per_patch]
-        """
-
         batch_size, num_images = images.shape[:2]
 
         x = images.flatten(0, 1)
@@ -71,17 +84,21 @@ class ImprovedSRTEncoder(nn.Module):
         patches_per_image, channels_per_patch = x.shape[1:]
         x = x.reshape(batch_size, num_images * patches_per_image, channels_per_patch)
 
+        # Apply masking here, but don't return the mask
+        x, _ = mask_tokens(x, self.mask_ratio)
+
+        # Pass through the transformer
         x = self.transformer(x)
 
         return x
 
-
 class OSRTEncoder(nn.Module):
     def __init__(self, pos_start_octave=0, num_slots=6, slot_dim=1536, slot_iters=1,
-                 randomize_initial_slots=False):
+                 randomize_initial_slots=False, mask_ratio=0.75):
         super().__init__()
         self.srt_encoder = ImprovedSRTEncoder(num_conv_blocks=3, num_att_blocks=5,
-                                             pos_start_octave=pos_start_octave)
+                                              pos_start_octave=pos_start_octave,
+                                              mask_ratio=mask_ratio)
 
         self.slot_attention = SlotAttention(num_slots, slot_dim=slot_dim, iters=slot_iters,
                                             randomize_initial_slots=randomize_initial_slots)
@@ -90,5 +107,3 @@ class OSRTEncoder(nn.Module):
         set_latents = self.srt_encoder(images, camera_pos, rays)
         slot_latents = self.slot_attention(set_latents)
         return slot_latents
-
-

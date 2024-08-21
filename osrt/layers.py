@@ -2,13 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import numpy as np
-
 import math
 from einops import rearrange
 
-
 __USE_DEFAULT_INIT__ = False
-
 
 class JaxLinear(nn.Linear):
     """ Linear layers with initialization matching the Jax defaults """
@@ -22,7 +19,6 @@ class JaxLinear(nn.Linear):
             if self.bias is not None:
                 init.zeros_(self.bias)
 
-
 class ViTLinear(nn.Linear):
     """ Initialization for linear layers used by ViT """
     def reset_parameters(self):
@@ -32,7 +28,6 @@ class ViTLinear(nn.Linear):
             init.xavier_uniform_(self.weight)
             if self.bias is not None:
                 init.normal_(self.bias, std=1e-6)
-
 
 class SRTLinear(nn.Linear):
     """ Initialization for linear layers used in the SRT decoder """
@@ -44,7 +39,6 @@ class SRTLinear(nn.Linear):
             if self.bias is not None:
                 init.zeros_(self.bias)
 
-
 class PositionalEncoding(nn.Module):
     def __init__(self, num_octaves=8, start_octave=0):
         super().__init__()
@@ -52,9 +46,7 @@ class PositionalEncoding(nn.Module):
         self.start_octave = start_octave
 
     def forward(self, coords, rays=None):
-        embed_fns = []
         batch_size, num_points, dim = coords.shape
-
         octaves = torch.arange(self.start_octave, self.start_octave + self.num_octaves)
         octaves = octaves.float().to(coords)
         multipliers = 2**octaves * math.pi
@@ -69,7 +61,6 @@ class PositionalEncoding(nn.Module):
 
         result = torch.cat((sines, cosines), -1)
         return result
-
 
 class RayEncoder(nn.Module):
     def __init__(self, pos_octaves=8, pos_start_octave=0, ray_octaves=4, ray_start_octave=0):
@@ -96,10 +87,6 @@ class RayEncoder(nn.Module):
 
         return x
 
-
-# Transformer implementation based on ViT
-# https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py
-
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -108,7 +95,6 @@ class PreNorm(nn.Module):
 
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
-
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.):
@@ -122,7 +108,6 @@ class FeedForward(nn.Module):
         )
     def forward(self, x):
         return self.net(x)
-
 
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0., selfatt=True, kv_dim=None):
@@ -145,7 +130,7 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
 
-    def forward(self, x, z=None):
+    def forward(self, x, z=None, mask=None):
         if z is None:
             qkv = self.to_qkv(x).chunk(3, dim=-1)
         else:
@@ -153,16 +138,19 @@ class Attention(nn.Module):
             k, v = self.to_kv(z).chunk(2, dim=-1)
             qkv = (q, k, v)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        if mask is not None:
+            mask = mask.unsqueeze(1).unsqueeze(2)  # [batch_size, 1, 1, num_patches]
+            dots = dots.masked_fill(mask == 0, float('-inf'))
 
         attn = self.attend(dots)
 
         out = torch.matmul(attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
-
 
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0., selfatt=True, kv_dim=None):
@@ -175,13 +163,11 @@ class Transformer(nn.Module):
                 PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout))
             ]))
 
-    def forward(self, x, z=None):
+    def forward(self, x, z=None, mask=None):
         for attn, ff in self.layers:
-            x = attn(x, z=z) + x
+            x = attn(x, z=z, mask=mask) + x
             x = ff(x) + x
         return x
-
-
 
 class SlotAttention(nn.Module):
     """
@@ -240,7 +226,6 @@ class SlotAttention(nn.Module):
             q = self.to_q(norm_slots)
 
             dots = torch.einsum('bid,bjd->bij', q, k) * self.scale
-            # shape: [batch_size, num_slots, num_inputs]
             attn = dots.softmax(dim=1) + self.eps
             attn = attn / attn.sum(dim=-1, keepdim=True)
             updates = torch.einsum('bjd,bij->bid', v, attn)
@@ -250,5 +235,3 @@ class SlotAttention(nn.Module):
             slots = slots + self.mlp(self.norm_pre_mlp(slots))
 
         return slots
-
-
