@@ -15,7 +15,7 @@ class PretrainVisionTransformerEncoder(nn.Module):
         self.depth = depth
         self.mask_ratio = mask_ratio
 
-        self.patch_embed = PatchEmbeddingWithRays(in_channels = in_channels, embed_dim = embed_dim)
+        self.patch_embed = PatchEmbeddingWithRays(in_channels = in_channels, embed_dim = embed_dim, kernel_size = patch_size)
 
         if use_learnable_pos_emb:
             self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, embed_dim))
@@ -113,10 +113,14 @@ class PretrainVisionTransformerDecoder(nn.Module):
     def get_num_layers(self) -> int:
         return depth
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, return_token_num) -> Tensor:
         x = self.blocks(x)
-        x = self.norm(x)
-        x = self.head(x)
+
+        if return_token_num > 0:
+            x = self.head(self.norm(x[:, -return_token_num:])) # only return the mask tokens predict pixels
+        else:
+            x = self.head(self.norm(x))
+
         return x
 
 class PretrainVisionTransformer(nn.Module):
@@ -184,11 +188,12 @@ class PretrainVisionTransformer(nn.Module):
 
     def forward(self, patches: Tensor, ray_origins: Tensor, ray_directions: Tensor) -> Tensor:
         x, mask, ids_restore = self.encoder(patches, ray_origins, ray_directions)
+        mask = mask.to(torch.long)
 
         B, N, C = x.shape
         # we don't unshuffle the correct visible token order, 
         # but shuffle the pos embedding accorddingly.
-        expand_pos_embed = self.pos_embed.expand(B, -1, -1).type_as(x).to(x.device).clone().detach()
+        expand_pos_embed = self.pos_embed(x).expand(B, -1, -1).type_as(x).to(x.device).clone().detach()
         pos_emd_vis = expand_pos_embed[~mask].reshape(B, -1, C)
         pos_emd_mask = expand_pos_embed[mask].reshape(B, -1, C)
         x_full = torch.cat([x + pos_emd_vis, self.mask_token + pos_emd_mask], dim=1)

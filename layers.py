@@ -169,15 +169,15 @@ class PositionalEncoding(nn.Module):
         Returns:
             Enriched input tensor with positional encoding applied
         """
-        print(x.shape, self.pe[:, :x.shape[1]].shape)
+
         x = x + self.pe[:, :x.shape[1]].to(x.device).requires_grad_(False) 
         return self.dropout(x)
 
 class PatchEmbeddingWithRays(nn.Module):
-    def __init__(self, in_channels = 9, embed_dim = 768):
+    def __init__(self, in_channels = 9, embed_dim = 768, kernel_size = [40, 30]):
         super().__init__()
 
-        self.proj = nn.Conv2d(in_channels = in_channels, out_channels = embed_dim, kernel_size = 1)
+        self.proj = nn.Conv2d(in_channels = in_channels, out_channels = embed_dim, kernel_size = kernel_size)
 
     def forward(self, patches: Tensor, ray_origins: Tensor, ray_directions: Tensor):
         B, C, H, W = patches.shape
