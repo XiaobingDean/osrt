@@ -149,7 +149,7 @@ class PositionalEncoding(nn.Module):
         sequence_length: Length of the input sequence.
         positional_encoding_dim: Dimension of the positional encoding.
     """
-    def __init__(self, sequence_length: int, positional_encoding_dim: int, dropout = 0.):
+    def __init__(self, sequence_length: int, positional_encoding_dim: int, dropout: float = 0.):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p = dropout)
 
@@ -174,17 +174,57 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class PatchEmbeddingWithRays(nn.Module):
-    def __init__(self, in_channels = 9, embed_dim = 768, kernel_size = [40, 30]):
+    """
+    Embedding rays and then concatenate to the input of encoder
+
+    Args:
+        in_channels: Number of channels of ray_origins + ray_directions + imgs
+        embed_dim: Dimension of embedding.
+        kernel_size: Kernel size of CNN to projection the input B, C, H, W to B, C, H // patch_h, W // patch_w
+    """
+    def __init__(self, in_channels: int = 9, embed_dim: int = 768, kernel_size: _size_2_t = [16, 10], stride: _size_2_t = [16, 10]):
         super().__init__()
 
-        self.proj = nn.Conv2d(in_channels = in_channels, out_channels = embed_dim, kernel_size = kernel_size)
+        self.proj = nn.Conv2d(in_channels = in_channels, out_channels = embed_dim, kernel_size = kernel_size, stride = stride)
 
-    def forward(self, patches: Tensor, ray_origins: Tensor, ray_directions: Tensor):
-        B, C, H, W = patches.shape
+    def forward(self, imgs: Tensor, ray_origins: Tensor, ray_directions: Tensor) -> Tensor:
+        B, C, H, W = imgs.shape
         
-        assert patches.shape == ray_origins.shape == ray_directions.shape
+        assert imgs.shape == ray_origins.shape == ray_directions.shape
 
-        x = torch.cat((patches, ray_origins, ray_directions), 1)
+        x = torch.cat((imgs, ray_origins, ray_directions), 1)
         x = self.proj(x).flatten(2).transpose(1, 2)
 
+        return x
+
+class PatchEmbeddingWithRaysDecoder(nn.Module):
+    """
+    Embedding rays and then add to the input of decoder
+
+    Args:
+        in_channels: Number of channels of rays
+        embed_dim: Dimension of embedding.
+        kernel_size: Kernel size of CNN to projection the input B, C, H, W to B, C, 1, 1
+    """
+    def __init__(self, in_channels: int = 6, embed_dim: int = 512, kernel_size: _size_2_t = [16, 10], stride: _size_2_t = [16, 10]):
+        super().__init__()
+        # self.downsample = nn.avgpool2d(kernel_size = 2, stride = 2)
+        self.proj = nn.Conv2d(in_channels = in_channels, out_channels = embed_dim, kernel_size = kernel_size, stride = stride)
+
+    def forward(self, x: Tensor, ray_origins: Tensor, ray_directions: Tensor, ids_mask: torch.long) -> Tensor:
+        """
+        Args:
+            x: Input tensor of shape (num_tokens, embed_dim).
+
+        Returns:
+            Adding ray embeddings to input.
+        """
+
+        rays = torch.cat((ray_origins, ray_directions), 1).requires_grad_(False)
+        # rays = self.downsample(rays)
+        with torch.no_grad():
+            rays_embedding = self.proj(rays).flatten(2).transpose(1, 2)     
+            rays_embedding = torch.gather(rays_embedding, dim = 1, index = ids_mask.unsqueeze(-1).repeat(1, 1, x.shape[-1])).requires_grad_(False)
+            x = x + rays_embedding.to(x.device)
+        
         return x

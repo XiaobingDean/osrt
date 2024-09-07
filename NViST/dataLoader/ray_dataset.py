@@ -156,10 +156,10 @@ class MVImgNetNeRF(Dataset):
             rds = self.patchify(torch.Tensor(rds).reshape(self.number_of_imgs_from_the_same_scene, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2), self.patch_hw)
             output['ray_origins'] = ros
             output['ray_directions'] = rds
-        else:
-            output['images'] = return_imgs
-            output['normalized_focals'] = [self.focals[scene_idx] / self.img_wh[1] for _ in range(len(output['images']))]
-            output['ray_origins'] = ros
-            output['ray_directions'] = rds
+        else:    
+            output['images'] = torch.Tensor(np.array(return_imgs)).reshape(-1, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2)
+            output['normalized_focals'] = torch.Tensor(np.array([self.focals[scene_idx] / self.img_wh[1] for _ in range(len(output['images']))]))
+            output['ray_origins'] = torch.Tensor(np.array(ros)).reshape(-1, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2)
+            output['ray_directions'] = torch.Tensor(np.array(rds)).reshape(-1, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2)
             
         return output
