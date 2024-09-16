@@ -12,16 +12,10 @@ from typing import TypeVar, Union, Tuple, Optional
 from torch import Tensor
 from torch.nn.modules.utils import _pair
 from torch.nn.common_types import _size_2_t
-import torchvision.transforms as transforms
-
-default_transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-])
 
 class MVImgNetNeRF(Dataset):
     def __init__(self, datadir: str, split: str='train', 
-                 img_wh: List[int]=[90,160], patch_hw: List[int]=[16,10], number_of_imgs_from_the_same_scene: int=4, transform = default_transform):
+                 img_wh: List[int]=[90,160], patch_hw: List[int]=[40,30], number_of_imgs_from_the_same_scene: int=4, return_as_patches: bool = True):
 
         '''
         Load cached data, return image patches and rays of its pixel
@@ -52,7 +46,7 @@ class MVImgNetNeRF(Dataset):
         self.num_objs = self.starting_idxs + self.ending_idxs[-1:]
         self.n_scenes = len(self.number_of_imgs_per_scene)
 
-        self.transform = transform
+        self.return_as_patches = return_as_patches
 
 
     def __len__(self): 
@@ -60,12 +54,7 @@ class MVImgNetNeRF(Dataset):
 
     def load_image(self, index: Union[int, np.int_], scene_index: int) -> np.ndarray:
         origin_H, origin_W = self.original_img_hws[scene_index]
-        imgs = np.array(Image.open(self.img_files[index]).resize([origin_W, origin_H], Image.LANCZOS).convert('RGB'))
-        if self.transform is not None:
-            imgs = self.transform(imgs)
-        else:
-            imgs = imgs / 255
-
+        imgs = np.array(Image.open(self.img_files[index]).resize([origin_W, origin_H], Image.LANCZOS).convert('RGB')) / 255.
         return imgs
 
     def patchify(self, img, patch_size: _size_2_t):
@@ -150,15 +139,27 @@ class MVImgNetNeRF(Dataset):
         output['scene_idx'] = scene_idx
         output['original_img_hws'] = np.array(self.original_img_hws[scene_idx])
 
-        # if self.transform is not None:
-        #     return_imgs = np.array(return_imgs).reshape(-1, self.img_wh[1], self.img_wh[0], 3)
-        #     return_imgs = self.transform(return_imgs)
-        #     output['images'] = return_imgs
-        # else:
-        output['images'] = torch.Tensor(np.array(return_imgs)).reshape(-1, 3, self.img_wh[1], self.img_wh[0])
-        
-        output['normalized_focals'] = torch.Tensor(np.array([self.focals[scene_idx] / self.img_wh[1] for _ in range(len(output['images']))]))
-        output['ray_origins'] = torch.Tensor(np.array(ros)).reshape(-1, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2)
-        output['ray_directions'] = torch.Tensor(np.array(rds)).reshape(-1, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2)
+        '''
+        The output shape and type is different from original version. If self.return_as_patches == True, return the new version. Else return the original version.
+        Return 'patchs' B * num_patches, 3, H, W (type: Tensor). Origin is 'images' with shape self.number_of_imgs_from_the_same_scene, 3, img_H, img_W (type: List).
+        Return 'normalized_focals' with shape (num_patches,) (type: List).  Origin is 'normalized_focals' with shape (self.number_of_imgs_from_the_same_scene,) (type: List).
+        Return 'ray_origins' with shape B * num_patches, 3, H, W (type: Tensor).  Origin is 'ray_origins' with shape self.number_of_imgs_from_the_same_scene, H * W, 3 (type: List).
+        Return 'ray_directions' with shape B * num_patches, 3, H, W (type: Tensor). Origin is 'ray_directions' with shape self.number_of_imgs_from_the_same_scene, H * W, 3 (type: List).
+        '''
+        if self.return_as_patches:
+            patches = self.patchify(return_imgs, self.patch_hw)
+            output['patches'] = patches
+
+            num_patches = patches.shape[0]
+            output['normalized_focals'] = [self.focals[scene_idx] / self.img_wh[1] for _ in range(num_patches)]
+            ros = self.patchify(torch.Tensor(ros).reshape(self.number_of_imgs_from_the_same_scene, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2), self.patch_hw)
+            rds = self.patchify(torch.Tensor(rds).reshape(self.number_of_imgs_from_the_same_scene, self.img_wh[1], self.img_wh[0], 3).permute(0, 3, 1, 2), self.patch_hw)
+            output['ray_origins'] = ros
+            output['ray_directions'] = rds
+        else:
+            output['images'] = return_imgs
+            output['normalized_focals'] = [self.focals[scene_idx] / self.img_wh[1] for _ in range(len(output['images']))]
+            output['ray_origins'] = ros
+            output['ray_directions'] = rds
             
         return output

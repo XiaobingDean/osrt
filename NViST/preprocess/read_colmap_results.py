@@ -256,6 +256,13 @@ def main():
         with open(camera_path, 'w') as f:
             json.dump(camera.to_json(), f, indent=2)
 
+import sys
+ 
+class Devnull:
+    def write(self, *args, **kwargs):
+        pass
+ 
+sys.stdout = sys.stderr = Devnull()
 
 if __name__ == "__main__":
     main()

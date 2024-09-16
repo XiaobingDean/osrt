@@ -6,7 +6,7 @@ from PIL import Image
 import glob
 import argparse
 # from opt import str2bool
-
+import tqdm
 def main():
     """
     Downsamples images in a dataset to multiple resolutions and saves them in separate directories.
@@ -33,10 +33,10 @@ def main():
     dirnames = os.listdir(args.data_dir)[::-1]
     dirnames = [dirname for dirname in dirnames if os.path.isdir(os.path.join(args.data_dir, dirname))]
 
-    for dirname in dirnames:
+    for dirname in tqdm.tqdm(dirnames):
         scenenames = sorted(os.listdir(os.path.join(args.data_dir, dirname)))
         cat_name = {}
-        for scenename in scenenames:
+        for scenename in tqdm.tqdm(scenenames):
             imgfiles = sorted(glob.glob(os.path.join(args.data_dir,dirname,scenename,'images/*.jpg')))
             savedir_12 = os.path.join(args.data_dir,dirname,scenename,'images_12')
             os.makedirs(savedir_12, exist_ok=True)
@@ -51,11 +51,11 @@ def main():
                 os.makedirs(savedir_128, exist_ok = True)
             scale = 0.0
             if len(imgfiles) > 0:
-                print(dirname, scenename, savedir_12, scale)
+                #print(dirname, scenename, savedir_12, scale)
                 for imgfile in imgfiles:
                     if imgfile.endswith(".jpg") or imgfile.endswith(".png"):
                         fname = imgfile.split('/')[-1]
-                        print(savedir_12, fname, imgfile.split('/')[-1], imgfile.split('/'))
+                        #print(savedir_12, fname, imgfile.split('/')[-1], imgfile.split('/'))
                         savepath_12 = os.path.join(savedir_12, fname)
                         if not os.path.isfile(savepath_12):
                             with Image.open(imgfile) as img:
@@ -119,8 +119,8 @@ def main():
                             scale = 0.0
                     else: 
                         scale = 0.0
-            else: 
-                print(dirname, scenename, savedir_12)
+            #else: 
+                #print(dirname, scenename, savedir_12)
 if __name__ == "__main__":
     main()
         

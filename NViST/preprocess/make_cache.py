@@ -6,6 +6,7 @@ import imageio
 import torch
 import argparse
 from typing import Tuple
+import tqdm
 
 def convert_3_4_to_4_4(pose: np.ndarray) -> np.ndarray:
     """
@@ -102,7 +103,7 @@ def main():
     """
 
     parser = argparse.ArgumentParser(description="make cache files")
-    parser.add_argument("--data_dir", type=str, default="../../data/mvimgnet_original")
+    parser.add_argument("--data_dir", type=str, default="../data")
     parser.add_argument("--split", type=str, default="train")
     args = parser.parse_args()
     split = args.split
@@ -118,7 +119,7 @@ def main():
     focals = []
     num_portraits = 0
 
-    for catdir in catdirs:
+    for catdir in tqdm.tqdm(catdirs):
         scenedirs = sorted(os.listdir(catdir))
         scenedirs = [os.path.join(catdir, scenedir) for scenedir in scenedirs if os.path.isdir(os.path.join(catdir,scenedir))]
         
