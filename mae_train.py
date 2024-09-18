@@ -14,7 +14,7 @@ class SceneMaskAutoEncoder(pl.LightningModule):
     def __init__(
         self,
         epochs = 500,
-        lr = 1.5e-4,
+        lr = 3.e-4,
         lr_min = 1e-5,
         warmup_epochs = 0,
         weight_decay = 0.05,
@@ -46,8 +46,8 @@ class SceneMaskAutoEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.model.parameters(), lr = self.lr, betas = self.betas, weight_decay = self.weight_decay)
-        scheduler = LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs = self.warmup_epochs, max_epochs = self.epochs, eta_min = self.lr_min)
-        return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]               
+        scheduler = LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs = self.warmup_epochs, max_epochs = self.epochs, eta_min = self.lr_min)  
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"}}   
     
     def training_step(self, train_batch, batch_idx) -> Tensor:
         opt = self.optimizers()
@@ -67,7 +67,7 @@ class SceneMaskAutoEncoder(pl.LightningModule):
 
         loss = self.compute_loss(pred, target, mask)
 
-        self.log(f"loss_epoch", loss.detach().cpu(), on_step = False, on_epoch = True)
+        self.log(f"loss_epoch", loss.detach().cpu(), on_step = False, on_epoch = True, sync_dist = True)
 
         return loss
 
@@ -81,7 +81,7 @@ class SceneMaskAutoEncoder(pl.LightningModule):
         loss = loss.mean(dim = -1)
 
         loss = (loss * mask).sum() / mask.sum()
-        self.log(f"loss_step", loss.detach().cpu())
+        self.log(f"loss_step", loss.detach().cpu(), sync_dist = True)
 
         return loss
 
@@ -102,13 +102,9 @@ class SceneMaskAutoEncoder(pl.LightningModule):
         target = self.model.patchify(imgs)
         val_loss = self.compute_loss(pred, target, mask)
         
-        self.log(f"val_loss", val_loss.detach().cpu(), on_epoch=True)
+        self.log(f"val_loss", val_loss.detach().cpu(), on_epoch = True, sync_dist = True)
 
-    def log_reconstruct_img(self, tag):
-        imgs = self.fixed_train['images'].to('cuda')       
-        ray_origins = self.fixed_train['ray_origins'].to('cuda')
-        ray_directions = self.fixed_train['ray_directions'].to('cuda')
-        
+    def log_reconstruct_img(self, tag, imgs, ray_origins, ray_directions):   
         with torch.no_grad():
             pred, mask = self.forward(imgs, ray_origins, ray_directions)
         
@@ -135,11 +131,17 @@ class SceneMaskAutoEncoder(pl.LightningModule):
     
     def on_train_epoch_end(self):
         if self.fixed_train is not None:
-            self.log_reconstruct_img('train')
+            imgs = self.fixed_train['images'].to('cuda')
+            ray_origins = self.fixed_train['ray_origins'].to('cuda')
+            ray_directions = self.fixed_train['ray_directions'].to('cuda')
+            self.log_reconstruct_img('train', imgs, ray_origins, ray_directions)
     
-    def on_val_epoch_end(self):
+    def on_validation_epoch_end(self):
         if self.fixed_val is not None:
-            self.log_reconstruct_img('val')
+            imgs = self.fixed_val['images'].to('cuda')
+            ray_origins = self.fixed_val['ray_origins'].to('cuda')
+            ray_directions = self.fixed_val['ray_directions'].to('cuda')
+            self.log_reconstruct_img('val', imgs, ray_origins, ray_directions)
 
 if __name__ == "__main__":
     import os
@@ -228,6 +230,7 @@ if __name__ == "__main__":
     model_parameters = yaml.load(f, Loader = yaml.FullLoader)
 
     lighting_module = SceneMaskAutoEncoder(epochs = epochs, model_parameters = model_parameters, fixed_train = fixed_train, fixed_val = fixed_val)
+
     from pytorch_lightning.callbacks import ModelCheckpoint
     from pytorch_lightning.loggers import TensorBoardLogger
 
@@ -254,7 +257,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator = accelerator,
         devices = gpus,
-        num_nodes=1,
+        num_nodes = 1,
         # limit_train_batches=limit_train_batches,
         # limit_val_batches=5,
         max_epochs = epochs,  # Stopping epoch
@@ -262,8 +265,9 @@ if __name__ == "__main__":
         callbacks = [checkpoint_callback, lr_monitor],  # You may add here additional call back that saves the best model
         # limit_train_batches=10,
         # detect_anomaly=True,
-        strategy = ("ddp_find_unused_parameters_true" if len(gpus) > 1 else "auto"),  # for distributed compatibility
-        log_every_n_steps = 500,
+        #strategy = ("ddp_find_unused_parameters_true" if len(gpus) > 1 else "auto"),  # for distributed compatibility
+        strategy = 'ddp' if len(gpus) > 1 else "auto",
+        log_every_n_steps = 200,
         enable_progress_bar = args.verbose,
         precision = 16
     )

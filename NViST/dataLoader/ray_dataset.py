@@ -11,7 +11,6 @@ from typing import Tuple, Union, List
 from typing import TypeVar, Union, Tuple, Optional
 from torch import Tensor
 from torch.nn.modules.utils import _pair
-from torch.nn.common_types import _size_2_t
 import torchvision.transforms as transforms
 
 default_transform = transforms.Compose([
@@ -67,27 +66,6 @@ class MVImgNetNeRF(Dataset):
             imgs = imgs / 255
 
         return imgs
-
-    def patchify(self, img, patch_size: _size_2_t):
-        """
-        Splits an image into non-overlapping patches.
-    
-        Args:
-            img: Input image tensor of shape (B, C, H, W).
-            patch_size: Size of the patch. int (size, size) or tuple (W, H)
-    
-        Returns:
-            A tensor of shape (B * num_patches, C, W, H).
-        """
-    
-        if isinstance(img, list):
-            img = torch.Tensor(np.array(img)).permute(0, 3, 1, 2)
-    
-        unfold = torch.nn.Unfold(kernel_size = patch_size, stride = patch_size)
-        patches = unfold(img).reshape(img.shape[0], img.shape[1], patch_size[0], patch_size[1], -1)
-        patches = patches.permute(0, 4, 1, 2, 3).reshape(-1, img.shape[1], patch_size[0], patch_size[1])
-        
-        return patches
 
     def get_data(self, scene_idx: int, return_scene_name = False) -> Union[Tuple[List[Tensor], List[Tensor], List[Tensor], List[float], Tensor], Tuple[List[Tensor], List[Tensor], List[Tensor], List[float], Tensor, str]]:
         idxs = torch.arange(self.starting_idxs[scene_idx], self.ending_idxs[scene_idx])
@@ -150,11 +128,6 @@ class MVImgNetNeRF(Dataset):
         output['scene_idx'] = scene_idx
         output['original_img_hws'] = np.array(self.original_img_hws[scene_idx])
 
-        # if self.transform is not None:
-        #     return_imgs = np.array(return_imgs).reshape(-1, self.img_wh[1], self.img_wh[0], 3)
-        #     return_imgs = self.transform(return_imgs)
-        #     output['images'] = return_imgs
-        # else:
         output['images'] = torch.Tensor(np.array(return_imgs)).reshape(-1, 3, self.img_wh[1], self.img_wh[0])
         
         output['normalized_focals'] = torch.Tensor(np.array([self.focals[scene_idx] / self.img_wh[1] for _ in range(len(output['images']))]))

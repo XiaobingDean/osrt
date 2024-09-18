@@ -2,3 +2,4 @@ data/
 *.ipynb
 *.pyc
 **/.ipynb_checkpoints
+lightning_logs/
