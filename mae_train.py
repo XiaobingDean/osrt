@@ -14,7 +14,7 @@ class SceneMaskAutoEncoder(pl.LightningModule):
     def __init__(
         self,
         epochs = 500,
-        lr = 3.e-4,
+        lr = 1.5e-4,
         lr_min = 1e-5,
         warmup_epochs = 0,
         weight_decay = 0.05,
@@ -153,7 +153,8 @@ if __name__ == "__main__":
     # Training Epochs
     parser.add_argument("-e", "--epochs", dest = "epochs", type = int, help = "Epochs for trainings", default = 800)
     # Batch Size
-    parser.add_argument("-b", "--batch-size", dest = "batch_size", type = int, help = "Batch size per iteration", default = 256)
+    parser.add_argument("-b", "--batch-size", dest = "batch_size", type = int, help = "Batch size per GPU", default = 256)
+    parser.add_argument("-l", "--lr", dest = "lr", type = float, help = "Base learning rate, lr = base_lr * batch_size // 256", default = 1.5e-4)
     # Dataset
     parser.add_argument(
         "-d",
@@ -189,12 +190,14 @@ if __name__ == "__main__":
     name = args.name
     epochs = args.epochs
     batch_size = args.batch_size
+    base_lr = args.lr
     dataset_path = args.dataset_path
     accelerator = args.accelerator
     gpus = args.gpus  # Or list of GPU-Ids; 0 is CPU
     print(f"Running on {accelerator}:")
     for gpu in gpus:
         print(f"\t[{gpu}]: {torch.cuda.get_device_name(gpu)}")
+    lr = base_lr * len(gpus) * batch_size // 256
     seed = args.seed
 
     if args.ckpt_path == "None":
@@ -229,7 +232,7 @@ if __name__ == "__main__":
     f = open('model_parameters.yaml','rb')
     model_parameters = yaml.load(f, Loader = yaml.FullLoader)
 
-    lighting_module = SceneMaskAutoEncoder(epochs = epochs, model_parameters = model_parameters, fixed_train = fixed_train, fixed_val = fixed_val)
+    lighting_module = SceneMaskAutoEncoder(epochs = epochs, lr = lr, model_parameters = model_parameters, fixed_train = fixed_train, fixed_val = fixed_val)
 
     from pytorch_lightning.callbacks import ModelCheckpoint
     from pytorch_lightning.loggers import TensorBoardLogger
