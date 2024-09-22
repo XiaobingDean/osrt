@@ -4,3 +4,4 @@ data/
 **/.ipynb_checkpoints
 lightning_logs/
 *.pbs
+zip_files/
