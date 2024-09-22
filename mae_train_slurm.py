@@ -124,18 +124,18 @@ class SceneMaskAutoEncoder(pl.LightningModule):
         tensorboard.add_image(tag + '_pred', pred, self.current_epoch, dataformats='HWC')
         tensorboard.add_image(tag + '_mix', recon, self.current_epoch, dataformats='HWC')
 
-        # plt.figure()
-        # plt.imshow(img)
-        # plt.xticks([]), plt.yticks([])
-        # plt.savefig('figs/' + tag + '_img_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
-        # plt.figure()
-        # plt.imshow(pred)
-        # plt.xticks([]), plt.yticks([])
-        # plt.savefig('figs/' + tag + '_pred_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
-        # plt.figure()
-        # plt.imshow(recon)
-        # plt.xticks([]), plt.yticks([])
-        # plt.savefig('figs/' + tag + '_recon_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+        plt.figure()
+        plt.imshow(img)
+        plt.xticks([]), plt.yticks([])
+        plt.savefig('figs/' + tag + '_img_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+        plt.figure()
+        plt.imshow(pred)
+        plt.xticks([]), plt.yticks([])
+        plt.savefig('figs/' + tag + '_pred_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+        plt.figure()
+        plt.imshow(recon)
+        plt.xticks([]), plt.yticks([])
+        plt.savefig('figs/' + tag + '_recon_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
 
     def unnormalize_imgs(self, imgs: Tensor) -> Tensor:
         mean = torch.tensor([0.5,0.5,0.5])
@@ -196,7 +196,8 @@ if __name__ == "__main__":
     parser.add_argument("--name", dest = "name", type = str, help = "Name of the worker", default = 'SceneMAE')
     parser.add_argument("-cp", "--ckpt-path", dest="ckpt_path", type=str, default=None, help="Checkpoint path")
     parser.add_argument("-v", "--verbose", dest = "verbose", type = bool, help = "Show progress bar or not", default = True)
-    
+    parser.add_argument("--num_nodes",dest="num_nodes", type=int, default=1, help="Number of nodes")
+
     #### Set Parameters / Initialize ###
     args = parser.parse_args()  # Get commandline arguments
     print(args)
@@ -211,8 +212,8 @@ if __name__ == "__main__":
     print(f"Running on {accelerator}:")
     for gpu in gpus:
         print(f"\t[{gpu}]: {torch.cuda.get_device_name(gpu)}")
-    lr = base_lr * (len(gpus) * batch_size // 256)
-    print(f"Learning rate: {lr}")
+    lr = base_lr * (len(gpus) * args.num_nodes * batch_size // 256)
+    print(f"Learning rate: {lr:.6f}")
     seed = args.seed
 
     if args.ckpt_path == "None":
@@ -275,7 +276,7 @@ if __name__ == "__main__":
     trainer = pl.Trainer(
         accelerator = accelerator,
         devices = gpus,
-        num_nodes = 1,
+        num_nodes = args.num_nodes,
         # limit_train_batches=limit_train_batches,
         # limit_val_batches=5,
         max_epochs = epochs,  # Stopping epoch
