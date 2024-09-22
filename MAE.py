@@ -72,10 +72,10 @@ class SceneMAE(nn.Module):
         imgs: (N, 3, H, W)
         output: (N, L, patch_h * patch_w *3)
         """
-
+        
         imgs = imgs.reshape(shape = (imgs.shape[0], 3, self.patch_h, self.patch_size[0], self.patch_w, self.patch_size[1]))
         imgs = torch.einsum('nchpwq->nhwpqc', imgs)
-        imgs = imgs.reshape(shape= (imgs.shape[0], self.patch_h * self.patch_w, self.patch_size[0] * self.patch_size[1] * 3))
+        imgs = imgs.reshape(shape = (imgs.shape[0], self.patch_h * self.patch_w, self.patch_size[0] * self.patch_size[1] * 3))
         return imgs
 
     def unpatchify(self, patches: Tensor) -> Tensor:
@@ -83,7 +83,6 @@ class SceneMAE(nn.Module):
         x: (N, L, patch_h * patch_w *3)
         imgs: (N, 3, H, W)
         """
-        
         patches = patches.reshape(shape = (patches.shape[0], self.patch_h, self.patch_w, self.patch_size[0], self.patch_size[1], 3))
         patches = torch.einsum('nhwpqc->nchpwq', patches)
         patches = patches.reshape(shape = (patches.shape[0], 3, self.img_size[0], self.img_size[1]))

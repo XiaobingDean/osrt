@@ -5,3 +5,5 @@ data/
 lightning_logs/
 *.pbs
 zip_files/
+figs/
+out/

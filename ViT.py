@@ -45,7 +45,7 @@ class PretrainVisionTransformerEncoder(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.blocks(x)
-        x= self.norm(x)
+        x = self.norm(x)
         
         return x
 
@@ -79,7 +79,8 @@ class PretrainVisionTransformerDecoder(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.blocks(x)
-        x = self.head(self.norm(x))
+        x = self.norm(x)
+        x = self.head(x)
 
         return x
 

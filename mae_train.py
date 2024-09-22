@@ -9,6 +9,7 @@ from NViST.dataLoader.ray_dataset import MVImgNetNeRF
 from flash.core.optimizers import LinearWarmupCosineAnnealingLR
 from pytorch_lightning.callbacks import LearningRateMonitor
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
 
 class SceneMaskAutoEncoder(pl.LightningModule):
     def __init__(
@@ -19,7 +20,7 @@ class SceneMaskAutoEncoder(pl.LightningModule):
         warmup_epochs = 0,
         weight_decay = 0.05,
         betas = (0.9, 0.95),
-        normalize_target = True,
+        normalize_target = False,
         model_parameters = None,
         fixed_train = None,
         fixed_val = None
@@ -123,6 +124,19 @@ class SceneMaskAutoEncoder(pl.LightningModule):
         tensorboard.add_image(tag + '_pred', pred, self.current_epoch, dataformats='HWC')
         tensorboard.add_image(tag + '_mix', recon, self.current_epoch, dataformats='HWC')
 
+        # plt.figure()
+        # plt.imshow(img)
+        # plt.xticks([]), plt.yticks([])
+        # plt.savefig('figs/' + tag + '_img_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+        # plt.figure()
+        # plt.imshow(pred)
+        # plt.xticks([]), plt.yticks([])
+        # plt.savefig('figs/' + tag + '_pred_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+        # plt.figure()
+        # plt.imshow(recon)
+        # plt.xticks([]), plt.yticks([])
+        # plt.savefig('figs/' + tag + '_recon_' + str(self.current_epoch), bbox_inches = 'tight', pad_inches = -0.01, dpi = 300)
+
     def unnormalize_imgs(self, imgs: Tensor) -> Tensor:
         mean = torch.tensor([0.5,0.5,0.5])
         std = torch.tensor([0.5,0.5,0.5])
@@ -198,6 +212,7 @@ if __name__ == "__main__":
     for gpu in gpus:
         print(f"\t[{gpu}]: {torch.cuda.get_device_name(gpu)}")
     lr = base_lr * len(gpus) * batch_size // 256
+    print(f"Learning rate: {lr}")
     seed = args.seed
 
     if args.ckpt_path == "None":

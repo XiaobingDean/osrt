@@ -139,6 +139,7 @@ class TransformerBlock(nn.Module):
         for attn, ff in self.layers:
             x = attn(x, z = z) + x
             x = ff(x) + x
+
         return x
 
 class PositionalEncoding(nn.Module):
