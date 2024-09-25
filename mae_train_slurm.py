@@ -197,6 +197,7 @@ if __name__ == "__main__":
     parser.add_argument("-cp", "--ckpt-path", dest="ckpt_path", type=str, default=None, help="Checkpoint path")
     parser.add_argument("-v", "--verbose", dest = "verbose", type = bool, help = "Show progress bar or not", default = True)
     parser.add_argument("--num_nodes",dest="num_nodes", type=int, default=1, help="Number of nodes")
+    parser.add_argument("--param",dest="param", type=str, default='model_parameters.yaml', help="Model parameters")
 
     #### Set Parameters / Initialize ###
     args = parser.parse_args()  # Get commandline arguments
@@ -245,7 +246,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, num_workers = args.num_workers, pin_memory = True)
     validation_loader = DataLoader(validation_dataset, batch_size = batch_size, shuffle = False, num_workers = args.num_workers, pin_memory = True)
 
-    f = open('model_parameters.yaml','rb')
+    f = open(args.param,'rb')
     model_parameters = yaml.load(f, Loader = yaml.FullLoader)
 
     lighting_module = SceneMaskAutoEncoder(epochs = epochs, lr = lr, model_parameters = model_parameters, fixed_train = fixed_train, fixed_val = fixed_val)
@@ -288,7 +289,7 @@ if __name__ == "__main__":
         strategy = 'ddp' if len(gpus) > 1 else "auto",
         log_every_n_steps = 200,
         enable_progress_bar = args.verbose,
-        precision = 16
+        #precision = 16
     )
 
     # Fit/train model
